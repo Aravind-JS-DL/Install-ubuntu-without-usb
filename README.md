@@ -1,5 +1,3 @@
-Here's the updated guide with the EFI flag step made optional:
-
 ---
 
 # ubuntu-dualboot-no-usb
