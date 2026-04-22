@@ -1,11 +1,7 @@
----
-
-# ubuntu-dualboot-no-usb
+# Install-ubuntu-dualboot-without-usb
 
 > **Install Ubuntu alongside Windows 10/11 — no USB drive, no CD, no external hardware.**
 > A modern, verified guide for UEFI/GPT systems.
-
----
 
 ## Table of Contents
 
