@@ -1,7 +1,11 @@
+Here's the updated guide with the EFI flag step made optional:
+
+---
+
 # ubuntu-dualboot-no-usb
 
-> **Install Ubuntu alongside Windows 10/11 — no USB drive, no CD, no external hardware.**  
-> A modern, verified guide for UEFI/GPT systems using the "Sleight of Hand" method.
+> **Install Ubuntu alongside Windows 10/11 — no USB drive, no CD, no external hardware.**
+> A modern, verified guide for UEFI/GPT systems.
 
 ---
 
@@ -9,11 +13,12 @@
 
 - [Disclaimer](#️-disclaimer)
 - [Why This Guide Exists](#why-does-this-guide-exist)
-- [How It Works](#the-sleight-of-hand--how-it-works)
+- [How It Works](#how-it-works)
 - [Prerequisites](#prerequisites)
 - [Phase 1 — Partition Your Drive in Windows](#phase-1--partition-your-drive-in-windows)
-- [Phase 2 — Set the UEFI Boot Flag](#phase-2--set-the-uefi-boot-flag)
-- [Phase 3 — The Sleight of Hand](#phase-3--the-sleight-of-hand-live-environment)
+- [Phase 2 — Boot the Installer](#phase-2--boot-the-installer)
+- [Phase 2B — If You Can't Boot (EFI Flag Workaround)](#phase-2b--if-you-cant-boot-efi-flag-workaround)
+- [Phase 3 — Strip the EFI Flag (if applied)](#phase-3--strip-the-efi-flag-if-applied)
 - [Phase 4 — Manual Installation](#phase-4--manual-installation)
 - [Phase 5 — Cleanup](#phase-5--cleanup)
 
@@ -41,15 +46,13 @@ Every existing "install Ubuntu without a USB" guide is broken in at least one of
 | Extract ISO → boot from internal partition | The Ubuntu installer flags that partition as an active system drive, locks the disk, and crashes GRUB with a `/cow` or `/boot/efi` error. |
 | `toram` + force-unmount workaround | Modern Ubuntu uses **Subiquity** as its installer backend. Unmounting the drive causes Subiquity to lose its `/cdrom/cloud-init` config files, crashing the installer in an infinite loop. |
 
-This guide solves all three problems without any external hardware.
-
 ---
 
-## The "Sleight of Hand" — How It Works
+## How It Works
 
-1. A temporary **8 GB partition** is assigned the official EFI boot flag in Windows — tricking your motherboard into booting the Ubuntu installer directly from your internal drive.
-2. Once the installer loads, **the flag is stripped away** while the system is still running.
-3. The installer files remain actively mounted (keeping Subiquity happy), but the fake EFI partition is now invisible to the installer — allowing a clean, error-free GRUB installation onto your real system drive.
+1. An **8 GB FAT32 partition** is created and the Ubuntu ISO contents are copied onto it — giving your system a bootable installer living entirely on your internal drive.
+2. Most modern UEFI systems will detect and boot this partition directly from the BIOS boot menu.
+3. If your motherboard refuses to boot it, a one-time **EFI GUID flag** can be assigned to the partition to force recognition — then immediately stripped once the live environment is running, keeping the GRUB installation clean.
 
 ---
 
@@ -65,9 +68,7 @@ This guide solves all three problems without any external hardware.
 
 ---
 
-## Step-by-Step Guide
-
-### Phase 1 — Partition Your Drive in Windows
+## Phase 1 — Partition Your Drive in Windows
 
 > Partitioning in Windows first prevents the Ubuntu installer from rewriting the partition table mid-install, which can trigger disk locks.
 
@@ -90,11 +91,23 @@ This guide solves all three problems without any external hardware.
 
 ---
 
-### Phase 2 — Set the UEFI Boot Flag
+## Phase 2 — Boot the Installer
 
-> Modern UEFI motherboards only boot from a partition that carries a specific EFI GUID. We assign this flag temporarily to our installer partition.
+1. Restart your PC and repeatedly press your BIOS boot menu key (`F12`, `F8`, `F2`, or `Del` — varies by manufacturer).
 
-1. Open **Command Prompt as Administrator**:  
+2. From the boot menu, look for your **internal drive** listed as a secondary **"UEFI OS"** entry and select it.
+
+3. If it appears and boots successfully into the Ubuntu installer, **skip Phase 2B entirely** and proceed to Phase 4.
+
+> **Can't see the drive in the boot menu, or it fails to boot?** Your motherboard may require the official EFI GUID to recognise the partition as bootable. Follow Phase 2B to apply it.
+
+---
+
+## Phase 2B — If You Can't Boot (EFI Flag Workaround)
+
+> This step is only needed if your motherboard refuses to boot the installer partition. It temporarily assigns an EFI system partition GUID to trick the firmware into recognising it.
+
+1. Open **Command Prompt as Administrator**:
    Start → type `cmd` → right-click → **Run as administrator**
 
 2. Run:
@@ -103,56 +116,52 @@ This guide solves all three problems without any external hardware.
    list volume
    ```
 
-3. Locate your `INSTALLER` volume in the list and note its **Volume #** (e.g. `4`).
+3. Locate your `INSTALLER` volume and note its **Volume #** (e.g. `4`).
 
-4. Run the following commands, replacing `X` with your volume number:
+4. Run the following, replacing `X` with your volume number:
    ```cmd
    select volume X
    set id=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
    exit
    ```
 
-> **What is that GUID?**  
-> `c12a7328-f81f-11d2-ba4b-00a0c93ec93b` is the universal EFI System Partition identifier defined by the UEFI specification. Assigning it to a partition signals your motherboard to treat it as bootable — regardless of what's actually on it.
+> **What is that GUID?**
+> `c12a7328-f81f-11d2-ba4b-00a0c93ec93b` is the universal EFI System Partition identifier defined by the UEFI specification. Assigning it signals your motherboard to treat the partition as bootable, regardless of what's actually on it.
+
+5. Restart and enter your BIOS boot menu again. Your internal drive should now appear as a bootable **"UEFI OS"** entry — select it.
+
+6. Select **Try or Install Ubuntu** and continue to Phase 3.
 
 ---
 
-### Phase 3 — The Sleight of Hand (Live Environment)
+## Phase 3 — Strip the EFI Flag (if applied)
 
-> We boot the installer and immediately strip the fake EFI flag while it's running — before the installer gets a chance to use it.
+> **Skip this phase if you did not apply the EFI flag in Phase 2B.**
 
-1. Restart your PC and repeatedly press your BIOS boot menu key (`F12`, `F8`, `F2`, or `Del` — varies by manufacturer).
+Once the live environment has loaded, you must remove the fake EFI flag before the installer runs — otherwise GRUB will try to install to the temporary partition instead of your real system drive.
 
-2. From the boot menu, select your **internal drive** — it may appear as a secondary **"UEFI OS"** entry.
+1. Open Terminal: `Ctrl` + `Alt` + `T`
 
-3. Select **Try or Install Ubuntu**.  
-   Modern Ubuntu ISOs will automatically launch the installer app in the background — this is expected behaviour.
-
-4. **Before proceeding in the installer**, open Terminal:  
-   `Ctrl` + `Alt` + `T`
-
-5. Identify your `INSTALLER` partition:
+2. Identify your `INSTALLER` partition:
    ```bash
    lsblk
    ```
-   Look for your ~8 GB partition. Note the **drive name** (e.g. `sda`, `nvme0n1`) and **partition number** (e.g. `3`).
+   Look for the ~8 GB partition. Note the **drive name** (e.g. `sda`, `nvme0n1`) and **partition number** (e.g. `3`).
 
-6. Strip the EFI flag (replace `sda` and `3` with your actual values):
+3. Strip the EFI flag (replace `sda` and `3` with your actual values):
    ```bash
    sudo parted /dev/sda set 3 esp off
    ```
    Any warning about `/etc/fstab` can be safely ignored.
 
-> ⚠️ **Critical — Do NOT unmount the drive or `/cdrom`.**  
-> The Subiquity installer backend requires these to remain actively mounted throughout the installation. Unmounting will crash the installer.
+> ⚠️ **Do NOT unmount the drive or `/cdrom`.**
+> Subiquity requires these to remain mounted throughout installation. Unmounting will crash the installer.
 
 ---
 
-### Phase 4 — Manual Installation
+## Phase 4 — Manual Installation
 
-> With the fake EFI flag removed, the installer no longer sees the temporary partition as a bootable EFI drive — GRUB installs cleanly to your real system drive.
-
-1. Switch back to the installer and proceed through the setup screens until you reach **Installation Type**.
+1. Switch to the installer and proceed through setup until you reach **Installation Type**.
 
 2. Select **Something else** (Manual Partitioning).
 
@@ -168,14 +177,14 @@ This guide solves all three problems without any external hardware.
    - Select the drive that contains your Windows installation (e.g. `/dev/nvme0n1` or `/dev/sda`).
    - The installer will automatically detect and use the existing Windows EFI partition on that drive — you do not need to configure the EFI partition manually.
 
-   > ⚠️ **If you have two physical drives:**  
+   > ⚠️ **If you have two physical drives:**
    > This dropdown will not auto-select. Identify which drive holds your Windows EFI partition (typically the primary drive) and select it explicitly. Choosing the wrong drive will break your Windows bootloader.
 
 5. Click **Install Now** and complete the remaining setup.
 
 ---
 
-### Phase 5 — Cleanup
+## Phase 5 — Cleanup
 
 1. Restart. You will be greeted by the **GRUB boot menu** — use it to choose between Ubuntu and Windows on every boot.
 
